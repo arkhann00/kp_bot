@@ -215,7 +215,7 @@ async def main():
     # Устанавливаем команды в меню
     await bot.set_my_commands([
         types.BotCommand(command="start", description="🚀 Запустить бота"),
-        types.BotCommand(command="help", description="ℹ️ Помощь"),
+        # types.BotCommand(command="help", description="ℹ️ Помощь"),
     ])
     
     try:
