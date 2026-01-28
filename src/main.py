@@ -12,6 +12,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID", "@kp_club")
 MINI_APP_URL = os.getenv("MINI_APP_URL")
+REQUIRE_SUBSCRIPTION = False  # ← Новое!
+ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "").split(","))) if os.getenv("ADMIN_IDS") else []
 
 # =============== ИНИЦИАЛИЗАЦИЯ ===============
 logging.basicConfig(
@@ -28,10 +30,12 @@ dp = Dispatcher(storage=storage)
 # =============== ПРОВЕРКА ПОДПИСКИ ===============
 async def check_subscription(user_id: int) -> bool:
     """Проверяет подписан ли пользователь на канал"""
+    # ✅ Если проверка подписки отключена - возвращаем True
+    if not REQUIRE_SUBSCRIPTION:
+        return True
+    
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        # Статусы: creator, administrator, member - подписан
-        # left, kicked - не подписан
         return member.status in ['creator', 'administrator', 'member']
     except Exception as e:
         logger.error(f"Ошибка проверки подписки: {e}")
@@ -50,7 +54,7 @@ def get_main_keyboard(is_subscribed: bool) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(
                 text="🔄 Проверить подписку",
                 callback_data="check_sub"
-            )]
+            )] if REQUIRE_SUBSCRIPTION else []  # ← Показываем только если проверка включена
         ])
     else:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -76,12 +80,19 @@ async def cmd_start(message: types.Message):
     is_subscribed = await check_subscription(user_id)
     
     if is_subscribed:
-        text = (
-            f"👋 Привет, <b>{user_name}</b>!\n\n"
-            f"✅ Вы подписаны на наш канал!\n\n"
-            f"🛍 Добро пожаловать в магазин премиальных аксессуаров <b>KP EXCLUSIVE</b>\n\n"
-            f"Нажмите кнопку ниже, чтобы начать покупки:"
-        )
+        if REQUIRE_SUBSCRIPTION:
+            text = (
+                f"👋 Привет, <b>{user_name}</b>!\n\n"
+                f"✅ Вы подписаны на наш канал!\n\n"
+                f"🛍 Добро пожаловать в магазин премиальных аксессуаров <b>KP EXCLUSIVE</b>\n\n"
+                f"Нажмите кнопку ниже, чтобы начать покупки:"
+            )
+        else:
+            text = (
+                f"👋 Привет, <b>{user_name}</b>!\n\n"
+                f"🛍 Добро пожаловать в магазин премиальных аксессуаров <b>KP EXCLUSIVE</b>\n\n"
+                f"Нажмите кнопку ниже, чтобы начать покупки:"
+            )
     else:
         text = (
             f"👋 Привет, <b>{user_name}</b>!\n\n"
@@ -112,6 +123,9 @@ async def check_subscription_callback(callback: types.CallbackQuery):
             f"✅ Отлично, <b>{user_name}</b>!\n\n"
             f"Вы успешно подписались на канал.\n"
             f"Теперь вам доступен магазин KP EXCLUSIVE! 🎉"
+        ) if REQUIRE_SUBSCRIPTION else (
+            f"✅ <b>{user_name}</b>!\n\n"
+            f"Магазин KP EXCLUSIVE доступен! 🎉"
         )
         await callback.message.edit_text(
             text=text,
@@ -136,13 +150,21 @@ async def check_subscription_callback(callback: types.CallbackQuery):
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
     """Помощь"""
-    text = (
-        "ℹ️ <b>Как пользоваться ботом:</b>\n\n"
-        "1️⃣ Подпишитесь на канал @kp_club\n"
-        "2️⃣ Нажмите «Проверить подписку»\n"
-        "3️⃣ Откройте магазин и выбирайте товары\n\n"
-        "💬 Вопросы? Пишите @kp_club"
-    )
+    if REQUIRE_SUBSCRIPTION:
+        text = (
+            "ℹ️ <b>Как пользоваться ботом:</b>\n\n"
+            "1️⃣ Подпишитесь на канал @kp_club\n"
+            "2️⃣ Нажмите «Проверить подписку»\n"
+            "3️⃣ Откройте магазин и выбирайте товары\n\n"
+            "💬 Вопросы? Пишите @kp_club"
+        )
+    else:
+        text = (
+            "ℹ️ <b>Как пользоваться ботом:</b>\n\n"
+            "1️⃣ Нажмите /start\n"
+            "2️⃣ Откройте магазин и выбирайте товары\n\n"
+            "💬 Вопросы? Пишите @kp_club"
+        )
     await message.answer(text, parse_mode="HTML")
 
 
@@ -153,8 +175,11 @@ async def cmd_stats(message: types.Message):
     if message.from_user.id not in ADMIN_IDS:
         return
     
+    sub_status = "✅ Включена" if REQUIRE_SUBSCRIPTION else "❌ Отключена"
+    
     text = (
         "📊 <b>Статистика бота</b>\n\n"
+        f"🔐 Проверка подписки: {sub_status}\n"
         "👥 Всего пользователей: -\n"
         "✅ Подписчиков: -\n"
         "❌ Не подписано: -\n\n"
@@ -185,6 +210,7 @@ async def handle_other_messages(message: types.Message):
 async def main():
     """Запуск бота"""
     logger.info("🤖 Бот запущен!")
+    logger.info(f"🔐 Проверка подписки: {'ВКЛЮЧЕНА' if REQUIRE_SUBSCRIPTION else 'ОТКЛЮЧЕНА'}")
     
     # Устанавливаем команды в меню
     await bot.set_my_commands([
